@@ -23,7 +23,7 @@ export function App() {
     return validPages.includes(hash) ? hash : 'accueil';
   });
 
-  // Initialize Dexie IndexedDB with sample records
+  // Initialise la base Supabase avec des dossiers de démonstration si elle est vide
   useEffect(() => {
     initDatabase().catch(err => {
       console.error('Erreur initialisation BDD:', err);

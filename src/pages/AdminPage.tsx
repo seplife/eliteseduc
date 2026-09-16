@@ -8,7 +8,14 @@ import {
   NIVEAUX_SCOLAIRES,
   LISTE_DOCUMENTS_REQUIS,
 } from '../types/dossier';
-import { db, resetDatabaseWithSamples, generateReference } from '../db/db';
+import {
+  getAllDossiers,
+  updateDossier,
+  deleteDossier,
+  addDossier,
+  resetDatabaseWithSamples,
+  generateReference,
+} from '../db/db';
 import { StatusBadge } from '../components/StatusBadge';
 import { ReceiptModal } from '../components/ReceiptModal';
 import type { PageId } from '../components/Header';
@@ -68,8 +75,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate: _onNavigate })
   const loadDossiers = async () => {
     setLoading(true);
     try {
-      const all = await db.dossiers.toArray();
-      all.sort((a, b) => new Date(b.recuLe).getTime() - new Date(a.recuLe).getTime());
+      const all = await getAllDossiers();
       setDossiers(all);
     } catch (err) {
       console.error('Erreur chargement dossiers:', err);
@@ -110,7 +116,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate: _onNavigate })
 
   // Status quick update
   const handleStatusChange = async (id: number, newStatut: StatutDossier) => {
-    await db.dossiers.update(id, { statut: newStatut });
+    await updateDossier(id, { statut: newStatut });
     await loadDossiers();
     if (selectedDossier && selectedDossier.id === id) {
       setSelectedDossier(prev => (prev ? { ...prev, statut: newStatut } : null));
@@ -124,14 +130,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate: _onNavigate })
       ? current.filter(d => d !== docId)
       : [...current, docId];
 
-    await db.dossiers.update(dossier.id!, { docsFournis: updated });
+    await updateDossier(dossier.id!, { docsFournis: updated });
     setSelectedDossier({ ...dossier, docsFournis: updated });
     await loadDossiers();
   };
 
   // Update admin note in modal
   const handleSaveNote = async (id: number, note: string) => {
-    await db.dossiers.update(id, { notesAdmin: note });
+    await updateDossier(id, { notesAdmin: note });
     await loadDossiers();
     alert('Remarque du secrétariat enregistrée avec succès.');
   };
@@ -139,7 +145,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate: _onNavigate })
   // Delete dossier
   const handleDelete = async (id: number, nomEleve: string) => {
     if (confirm(`Confirmez-vous la suppression définitive du dossier de ${nomEleve} ?`)) {
-      await db.dossiers.delete(id);
+      await deleteDossier(id);
       await loadDossiers();
       if (selectedDossier?.id === id) setSelectedDossier(null);
     }
@@ -237,7 +243,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate: _onNavigate })
       notesAdmin: 'Dossier créé manuellement au guichet par le secrétariat.',
     };
 
-    await db.dossiers.add(dossier);
+    await addDossier(dossier);
     setIsCreatingNew(false);
     setNewNom('');
     await loadDossiers();

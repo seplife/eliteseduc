@@ -8,7 +8,7 @@ import {
   PATHOLOGIES_LISTE,
   LISTE_DOCUMENTS_REQUIS,
 } from '../types/dossier';
-import { db, generateReference } from '../db/db';
+import { addDossier, generateReference } from '../db/db';
 import { ReceiptModal } from '../components/ReceiptModal';
 import type { PageId } from '../components/Header';
 import confetti from 'canvas-confetti';
@@ -223,7 +223,7 @@ export const InscriptionPage: React.FC<InscriptionPageProps> = ({ onNavigate }) 
         notesAdmin: 'Fiche soumise via le portail web ElitesEduca+.',
       };
 
-      const id = await db.dossiers.add(newDossier);
+      const id = await addDossier(newDossier);
       newDossier.id = id;
 
       setCreatedDossier(newDossier);

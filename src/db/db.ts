@@ -1,18 +1,7 @@
-import Dexie, { type EntityTable } from 'dexie';
+import { supabase } from '../lib/supabaseClient';
 import type { DossierEleve } from '../types/dossier';
 
-export class ElitesEducaDatabase extends Dexie {
-  dossiers!: EntityTable<DossierEleve, 'id'>;
-
-  constructor() {
-    super('ElitesEducaDB');
-    this.version(1).stores({
-      dossiers: '++id, ref, nom, niveau, statut, recuLe, pereContact, mereContact, tutContact',
-    });
-  }
-}
-
-export const db = new ElitesEducaDatabase();
+const TABLE = 'dossiers';
 
 // Données initiales réalistes pour la démonstration
 export const INITIAL_DEMO_DOSSIERS: Omit<DossierEleve, 'id'>[] = [
@@ -195,21 +184,11 @@ export const INITIAL_DEMO_DOSSIERS: Omit<DossierEleve, 'id'>[] = [
     etabOrigine: 'EPP Plateau Divo',
     classeSuivie: 'CM2',
     mga: '132.5 pts CEPE',
-    docsFournis: [
-      'Acte de naissance',
-    ],
-    notesAdmin: 'Dossier incomplet : Manque la CNI du parent, le relevé de notes CEPE original et le livret scolaire.',
+    docsFournis: ['Acte de naissance'],
+    notesAdmin:
+      'Dossier incomplet : Manque la CNI du parent, le relevé de notes CEPE original et le livret scolaire.',
   },
 ];
-
-// Initialise la BDD avec les dossiers démos si elle est vide
-export async function initDatabase(): Promise<void> {
-  const count = await db.dossiers.count();
-  if (count === 0) {
-    await db.dossiers.bulkAdd(INITIAL_DEMO_DOSSIERS);
-    console.log('Base de données initialisée avec les dossiers démo.');
-  }
-}
 
 // Générateur de référence unique au format ED-2026-XXXX
 export function generateReference(): string {
@@ -217,21 +196,119 @@ export function generateReference(): string {
   return `ED-2026-${randNum}`;
 }
 
-// Recherche par référence ou nom
-export async function findDossier(query: string): Promise<DossierEleve | null> {
-  const q = query.trim().toUpperCase();
-  // Recherche d'abord par référence exacte
-  const byRef = await db.dossiers.where('ref').equalsIgnoreCase(q).first();
-  if (byRef) return byRef;
+// Récupère tous les dossiers, triés du plus récent au plus ancien
+export async function getAllDossiers(): Promise<DossierEleve[]> {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('*')
+    .order('recuLe', { ascending: false });
 
-  // Recherche par nom
-  const all = await db.dossiers.toArray();
-  const byNom = all.find(d => d.nom.toUpperCase().includes(q));
-  return byNom || null;
+  if (error) {
+    console.error('Erreur chargement dossiers (Supabase):', error);
+    throw error;
+  }
+  return (data ?? []) as DossierEleve[];
 }
 
-// Réinitialisation avec données d'exemple
+// Ajoute un nouveau dossier et retourne son id généré par la base
+export async function addDossier(dossier: Omit<DossierEleve, 'id'>): Promise<number> {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .insert(dossier)
+    .select('id')
+    .single();
+
+  if (error) {
+    console.error('Erreur ajout dossier (Supabase):', error);
+    throw error;
+  }
+  return data.id as number;
+}
+
+// Met à jour un ou plusieurs champs d'un dossier
+export async function updateDossier(
+  id: number,
+  changes: Partial<DossierEleve>
+): Promise<void> {
+  const { error } = await supabase.from(TABLE).update(changes).eq('id', id);
+  if (error) {
+    console.error('Erreur mise à jour dossier (Supabase):', error);
+    throw error;
+  }
+}
+
+// Supprime définitivement un dossier
+export async function deleteDossier(id: number): Promise<void> {
+  const { error } = await supabase.from(TABLE).delete().eq('id', id);
+  if (error) {
+    console.error('Erreur suppression dossier (Supabase):', error);
+    throw error;
+  }
+}
+
+// Recherche par référence exacte ou par nom (utilisé par la page Suivi)
+export async function findDossier(query: string): Promise<DossierEleve | null> {
+  const q = query.trim();
+  if (!q) return null;
+
+  // 1. Recherche exacte par référence (insensible à la casse)
+  const { data: byRef, error: errRef } = await supabase
+    .from(TABLE)
+    .select('*')
+    .ilike('ref', q)
+    .limit(1)
+    .maybeSingle();
+
+  if (errRef) {
+    console.error('Erreur recherche par référence (Supabase):', errRef);
+  }
+  if (byRef) return byRef as DossierEleve;
+
+  // 2. Recherche par nom (contient)
+  const { data: byNom, error: errNom } = await supabase
+    .from(TABLE)
+    .select('*')
+    .ilike('nom', `%${q}%`)
+    .limit(1)
+    .maybeSingle();
+
+  if (errNom) {
+    console.error('Erreur recherche par nom (Supabase):', errNom);
+    return null;
+  }
+  return (byNom as DossierEleve) ?? null;
+}
+
+// Réinitialisation avec les dossiers d'exemple (efface tout puis réinsère les démos)
 export async function resetDatabaseWithSamples(): Promise<void> {
-  await db.dossiers.clear();
-  await db.dossiers.bulkAdd(INITIAL_DEMO_DOSSIERS);
+  const { error: delError } = await supabase.from(TABLE).delete().gte('id', 0);
+  if (delError) {
+    console.error('Erreur réinitialisation (suppression) Supabase:', delError);
+    throw delError;
+  }
+  const { error: insError } = await supabase.from(TABLE).insert(INITIAL_DEMO_DOSSIERS);
+  if (insError) {
+    console.error('Erreur réinitialisation (insertion) Supabase:', insError);
+    throw insError;
+  }
+}
+
+// Initialise la base avec les dossiers démo si elle est vide (ne s'exécute qu'une fois globalement)
+export async function initDatabase(): Promise<void> {
+  const { count, error } = await supabase
+    .from(TABLE)
+    .select('*', { count: 'exact', head: true });
+
+  if (error) {
+    console.error('Erreur vérification base Supabase:', error);
+    return;
+  }
+  if (count === 0) {
+    const { error: insError } = await supabase.from(TABLE).insert(INITIAL_DEMO_DOSSIERS);
+    if (insError) {
+      console.error('Erreur initialisation dossiers démo (Supabase):', insError);
+    } else {
+      console.log('Base de données Supabase initialisée avec les dossiers démo.');
+    }
+  }
 }
