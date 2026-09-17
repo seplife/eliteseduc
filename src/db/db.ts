@@ -48,6 +48,9 @@ export const INITIAL_DEMO_DOSSIERS: Omit<DossierEleve, 'id'>[] = [
       'Reçu inscription',
     ],
     notesAdmin: 'Dossier pré-enregistré en ligne. En attente de la CNI du parent.',
+    montantTotal: 115000,
+    montantPaye: 50000,
+    prochainPaiementDate: '2026-10-15',
   },
   {
     ref: 'ED-2026-1042',
@@ -98,6 +101,8 @@ export const INITIAL_DEMO_DOSSIERS: Omit<DossierEleve, 'id'>[] = [
       'Carnet',
     ],
     notesAdmin: 'Pièces physiques déposées. Vérification de l’authentification du bulletin en cours.',
+    montantTotal: 135000,
+    montantPaye: 135000,
   },
   {
     ref: 'ED-2026-1893',
@@ -147,6 +152,9 @@ export const INITIAL_DEMO_DOSSIERS: Omit<DossierEleve, 'id'>[] = [
       'Carte acces',
     ],
     notesAdmin: 'Dossier complet et validé. Carte scolaire et macaron délivrés.',
+    montantTotal: 165000,
+    montantPaye: 100000,
+    prochainPaiementDate: '2026-11-01',
   },
   {
     ref: 'ED-2026-2401',
@@ -187,6 +195,9 @@ export const INITIAL_DEMO_DOSSIERS: Omit<DossierEleve, 'id'>[] = [
     docsFournis: ['Acte de naissance'],
     notesAdmin:
       'Dossier incomplet : Manque la CNI du parent, le relevé de notes CEPE original et le livret scolaire.',
+    montantTotal: 100000,
+    montantPaye: 0,
+    prochainPaiementDate: '2026-09-30',
   },
 ];
 
@@ -244,6 +255,42 @@ export async function deleteDossier(id: number): Promise<void> {
     console.error('Erreur suppression dossier (Supabase):', error);
     throw error;
   }
+}
+
+// Récupère un dossier par sa référence EXACTE, avec uniquement les champs
+// nécessaires à la page publique de vérification (scan du QR code).
+// Volontairement limité : ne renvoie ni les contacts des parents/tuteur,
+// ni les notes internes du secrétariat.
+export type DossierVerification = Pick<
+  DossierEleve,
+  | 'ref'
+  | 'nom'
+  | 'niveau'
+  | 'classe'
+  | 'statut'
+  | 'montantTotal'
+  | 'montantPaye'
+  | 'prochainPaiementDate'
+>;
+
+export async function getDossierForVerification(
+  ref: string
+): Promise<DossierVerification | null> {
+  const q = ref.trim();
+  if (!q) return null;
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('ref, nom, niveau, classe, statut, montantTotal, montantPaye, prochainPaiementDate')
+    .ilike('ref', q)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Erreur vérification dossier (Supabase):', error);
+    throw error;
+  }
+  return (data as DossierVerification) ?? null;
 }
 
 // Recherche par référence exacte ou par nom (utilisé par la page Suivi)

@@ -7,6 +7,7 @@ import {
   NIVEAUX_SCOLAIRES,
   PATHOLOGIES_LISTE,
   LISTE_DOCUMENTS_REQUIS,
+  TARIFS_PAR_NIVEAU,
 } from '../types/dossier';
 import { addDossier, generateReference } from '../db/db';
 import { ReceiptModal } from '../components/ReceiptModal';
@@ -221,6 +222,8 @@ export const InscriptionPage: React.FC<InscriptionPageProps> = ({ onNavigate }) 
         santeAutre: probSante === 'oui' ? santeAutre.trim() : undefined,
         docsFournis,
         notesAdmin: 'Fiche soumise via le portail web ElitesEduca+.',
+        montantTotal: TARIFS_PAR_NIVEAU[niveau],
+        montantPaye: 0,
       };
 
       const id = await addDossier(newDossier);

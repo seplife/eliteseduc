@@ -7,6 +7,10 @@ import type {
 import {
   NIVEAUX_SCOLAIRES,
   LISTE_DOCUMENTS_REQUIS,
+  TARIFS_PAR_NIVEAU,
+  getMontantRestant,
+  isDossierSolde,
+  formatFCFA,
 } from '../types/dossier';
 import {
   getAllDossiers,
@@ -32,6 +36,7 @@ import {
   Eye,
   X,
   FileSpreadsheet,
+  Wallet,
 } from 'lucide-react';
 
 interface AdminPageProps {
@@ -59,6 +64,43 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate: _onNavigate })
   const [selectedDossier, setSelectedDossier] = useState<DossierEleve | null>(null);
   const [receiptDossier, setReceiptDossier] = useState<DossierEleve | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
+
+  // Formulaire "Situation financière" (synchronisé avec le dossier ouvert)
+  const [paymentTotal, setPaymentTotal] = useState<string>('');
+  const [paymentPaye, setPaymentPaye] = useState<string>('');
+  const [paymentDate, setPaymentDate] = useState<string>('');
+  const [savingPayment, setSavingPayment] = useState(false);
+
+  useEffect(() => {
+    if (selectedDossier) {
+      setPaymentTotal(
+        String(selectedDossier.montantTotal ?? TARIFS_PAR_NIVEAU[selectedDossier.niveau] ?? '')
+      );
+      setPaymentPaye(String(selectedDossier.montantPaye ?? 0));
+      setPaymentDate(selectedDossier.prochainPaiementDate?.slice(0, 10) ?? '');
+    }
+  }, [selectedDossier?.id]);
+
+  const handleSavePayment = async () => {
+    if (!selectedDossier?.id) return;
+    setSavingPayment(true);
+    try {
+      const changes = {
+        montantTotal: paymentTotal.trim() === '' ? undefined : Number(paymentTotal),
+        montantPaye: paymentPaye.trim() === '' ? 0 : Number(paymentPaye),
+        prochainPaiementDate: paymentDate.trim() === '' ? undefined : paymentDate,
+      };
+      await updateDossier(selectedDossier.id, changes);
+      setSelectedDossier(prev => (prev ? { ...prev, ...changes } : null));
+      await loadDossiers();
+      alert('Situation financière mise à jour avec succès.');
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de l'enregistrement du paiement.");
+    } finally {
+      setSavingPayment(false);
+    }
+  };
 
   // New Dossier Form (Quick Counter Registration)
   const [newNom, setNewNom] = useState('');
@@ -241,6 +283,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate: _onNavigate })
       orphelinMere: false,
       docsFournis: ['Acte de naissance'],
       notesAdmin: 'Dossier créé manuellement au guichet par le secrétariat.',
+      montantTotal: TARIFS_PAR_NIVEAU[newNiveau],
+      montantPaye: 0,
     };
 
     await addDossier(dossier);
@@ -730,6 +774,93 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate: _onNavigate })
                   <div>Lien : {selectedDossier.tutLien || 'Parent'}</div>
                   <div>Quartier : {selectedDossier.tutQuartier || 'Divo'}</div>
                   <div>Contact Tuteur : {selectedDossier.tutContact || '—'}</div>
+                </div>
+              </div>
+
+              {/* Situation financière (paiement de la scolarité) */}
+              <div className="bg-[#FFFDF8] p-4 rounded-sm border border-gray-200 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="font-serif font-bold text-xs text-[#450C15] uppercase tracking-wide flex items-center gap-1.5">
+                    <Wallet className="w-3.5 h-3.5" />
+                    Situation financière (scolarité)
+                  </h4>
+                  <span
+                    className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
+                      isDossierSolde({
+                        montantTotal: Number(paymentTotal) || 0,
+                        montantPaye: Number(paymentPaye) || 0,
+                      })
+                        ? 'bg-[#E8F5E9] text-[#2E7D32]'
+                        : 'bg-[#FFF3D6] text-[#8A5A00]'
+                    }`}
+                  >
+                    {isDossierSolde({
+                      montantTotal: Number(paymentTotal) || 0,
+                      montantPaye: Number(paymentPaye) || 0,
+                    })
+                      ? 'Soldé'
+                      : 'Non soldé'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">
+                      Montant total (FCFA)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={paymentTotal}
+                      onChange={e => setPaymentTotal(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border rounded-xs text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">
+                      Montant payé (FCFA)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={paymentPaye}
+                      onChange={e => setPaymentPaye(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border rounded-xs text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">
+                      Prochain paiement le
+                    </label>
+                    <input
+                      type="date"
+                      value={paymentDate}
+                      onChange={e => setPaymentDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border rounded-xs text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+                  <span className="text-xs text-gray-600">
+                    Montant restant :{' '}
+                    <strong className="text-[#C62828]">
+                      {formatFCFA(
+                        getMontantRestant({
+                          montantTotal: Number(paymentTotal) || 0,
+                          montantPaye: Number(paymentPaye) || 0,
+                        })
+                      )}
+                    </strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSavePayment}
+                    disabled={savingPayment}
+                    className="px-3.5 py-1.5 bg-[#2F6B3A] text-white font-bold text-xs rounded-xs hover:bg-[#1E4A28] disabled:opacity-50 cursor-pointer"
+                  >
+                    {savingPayment ? 'Enregistrement...' : 'Enregistrer le paiement'}
+                  </button>
                 </div>
               </div>
 

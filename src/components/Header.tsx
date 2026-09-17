@@ -21,7 +21,8 @@ export type PageId =
   | 'suivi'
   | 'pieces'
   | 'admin'
-  | 'contact';
+  | 'contact'
+  | 'verification';
 
 interface HeaderProps {
   currentPage: PageId;

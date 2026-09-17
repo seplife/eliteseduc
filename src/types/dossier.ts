@@ -60,6 +60,42 @@ export interface DossierEleve {
 
   // Contrôle pièces physiques
   docsFournis: string[];
+
+  // Situation financière (frais de scolarité)
+  montantTotal?: number; // Montant total dû pour l'année (FCFA)
+  montantPaye?: number; // Montant déjà versé (FCFA)
+  prochainPaiementDate?: string; // Date ISO du prochain versement attendu
+}
+
+// Grille tarifaire indicative par niveau (droits + scolarité annuelle), en FCFA
+export const TARIFS_PAR_NIVEAU: Record<NiveauScolaire, number> = {
+  '6ème': 100000,
+  '5ème': 100000,
+  '4ème': 115000,
+  '3ème': 115000,
+  '2nde': 135000,
+  '1ère': 145000,
+  Terminale: 165000,
+};
+
+// Montant restant à payer (jamais négatif)
+export function getMontantRestant(dossier: Pick<DossierEleve, 'montantTotal' | 'montantPaye'>): number {
+  const total = dossier.montantTotal ?? 0;
+  const paye = dossier.montantPaye ?? 0;
+  return Math.max(total - paye, 0);
+}
+
+// Un dossier est considéré "soldé" si un montant total a été fixé et intégralement payé
+export function isDossierSolde(dossier: Pick<DossierEleve, 'montantTotal' | 'montantPaye'>): boolean {
+  const total = dossier.montantTotal ?? 0;
+  const paye = dossier.montantPaye ?? 0;
+  return total > 0 && paye >= total;
+}
+
+// Formatage d'un montant en FCFA (Ex: 1 000 000 FCFA)
+export function formatFCFA(montant: number | undefined | null): string {
+  const valeur = montant ?? 0;
+  return `${valeur.toLocaleString('fr-FR')} FCFA`;
 }
 
 export const LISTE_DOCUMENTS_REQUIS = [

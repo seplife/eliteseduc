@@ -62,8 +62,20 @@ create table if not exists public.dossiers (
   -- Pièces fournies
   "docsFournis"                text[] not null default '{}',
 
+  -- Situation financière
+  "montantTotal"                integer,
+  "montantPaye"                 integer not null default 0,
+  "prochainPaiementDate"        date,
+
   created_at                   timestamptz not null default now()
 );
+
+-- Si tu avais déjà créé la table AVANT l'ajout du suivi des paiements,
+-- ces instructions ajoutent les colonnes manquantes sans rien casser
+-- (sans effet si la table vient d'être créée ci-dessus).
+alter table public.dossiers add column if not exists "montantTotal" integer;
+alter table public.dossiers add column if not exists "montantPaye" integer not null default 0;
+alter table public.dossiers add column if not exists "prochainPaiementDate" date;
 
 -- Index utiles pour les recherches et le tri
 create index if not exists dossiers_ref_idx on public.dossiers (ref);

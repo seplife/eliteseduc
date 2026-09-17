@@ -1,15 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { DossierEleve } from '../types/dossier';
-import { LISTE_DOCUMENTS_REQUIS } from '../types/dossier';
+import {
+  LISTE_DOCUMENTS_REQUIS,
+  getMontantRestant,
+  isDossierSolde,
+  formatFCFA,
+} from '../types/dossier';
 import { StatusBadge } from './StatusBadge';
+import { downloadElementAsPdf } from '../lib/pdf';
+import { QRCodeCanvas } from 'qrcode.react';
 import {
   Printer,
   X,
   Download,
-  QrCode,
   MapPin,
   Phone,
   ShieldCheck,
+  Wallet,
+  CalendarClock,
+  Loader2,
 } from 'lucide-react';
 
 // ============================================================
@@ -34,6 +43,42 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const handlePrint = () => {
     window.print();
   };
+
+  // ==========================================================
+  // TÉLÉCHARGEMENT PDF (indépendant de la boîte de dialogue
+  // d'impression du navigateur)
+  // ==========================================================
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      await downloadElementAsPdf(
+        'printable-receipt',
+        `Recepisse_${dossier.ref}_${dossier.nom.replace(/\s+/g, '_')}.pdf`
+      );
+    } catch (err) {
+      console.error('Erreur génération PDF:', err);
+      alert(
+        "Une erreur est survenue lors de la génération du PDF. Vous pouvez utiliser « Imprimer » puis choisir « Enregistrer en PDF »."
+      );
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  // ==========================================================
+  // SITUATION FINANCIÈRE
+  // ==========================================================
+  const solde = isDossierSolde(dossier);
+  const montantRestant = getMontantRestant(dossier);
+
+  // ==========================================================
+  // CODE QR — pointe vers la page publique de vérification
+  // (#verification/REF), consultable par le secrétariat ou les
+  // parents en scannant le récépissé, sans authentification.
+  // ==========================================================
+  const verificationUrl = `${window.location.origin}${window.location.pathname}#verification/${dossier.ref}`;
 
   // ==========================================================
   // DATE DE CRÉATION DU RÉCÉPISSÉ
@@ -156,6 +201,37 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             >
               <Printer className="w-4 h-4" />
               <span>Imprimer</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="
+                inline-flex
+                items-center
+                gap-2
+                bg-white
+                hover:bg-[#F4D889]
+                text-[#450C15]
+                font-semibold
+                text-sm
+                px-4
+                py-2
+                rounded-sm
+                transition-colors
+                cursor-pointer
+                shadow-sm
+                disabled:opacity-60
+                disabled:cursor-wait
+              "
+            >
+              {isGeneratingPdf ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>{isGeneratingPdf ? 'Génération...' : 'Télécharger PDF'}</span>
             </button>
 
             <button
@@ -888,6 +964,137 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             </section>
 
             {/* =================================================
+                SECTION 2 BIS — SITUATION FINANCIÈRE
+            ================================================== */}
+            <section>
+              <div
+                className="
+                  flex
+                  items-center
+                  justify-between
+                  gap-3
+                  border-b
+                  border-[#E7DCC7]
+                  pb-1.5
+                  mb-3
+                "
+              >
+                <h2
+                  className="
+                    font-serif
+                    font-bold
+                    text-sm
+                    sm:text-base
+                    text-[#450C15]
+                    uppercase
+                    tracking-wide
+                    flex
+                    items-center
+                    gap-1.5
+                  "
+                >
+                  <Wallet className="w-4 h-4" />
+                  3. Situation financière (scolarité)
+                </h2>
+
+                <span
+                  className={`
+                    text-[10px]
+                    sm:text-xs
+                    font-bold
+                    uppercase
+                    px-2.5
+                    py-1
+                    rounded-full
+                    ${
+                      solde
+                        ? 'bg-[#E8F5E9] text-[#2E7D32]'
+                        : 'bg-[#FFF3D6] text-[#8A5A00]'
+                    }
+                  `}
+                >
+                  {solde ? 'Soldé' : 'Non soldé'}
+                </span>
+              </div>
+
+              <div
+                className="
+                  grid
+                  grid-cols-2
+                  sm:grid-cols-4
+                  gap-3
+                  bg-[#FFFDF8]
+                  p-4
+                  rounded-md
+                  border
+                  border-[#E7DCC7]
+                  text-xs
+                "
+              >
+                <div className="bg-[#FBF6EA] rounded-sm p-2.5">
+                  <span className="text-[10px] text-gray-500 block">
+                    Montant total dû
+                  </span>
+                  <strong className="text-sm text-[#221812]">
+                    {formatFCFA(dossier.montantTotal)}
+                  </strong>
+                </div>
+
+                <div className="bg-[#FBF6EA] rounded-sm p-2.5">
+                  <span className="text-[10px] text-gray-500 block">
+                    Montant déjà payé
+                  </span>
+                  <strong className="text-sm text-[#2F6B3A]">
+                    {formatFCFA(dossier.montantPaye)}
+                  </strong>
+                </div>
+
+                <div
+                  className={`rounded-sm p-2.5 ${
+                    solde ? 'bg-[#E8F5E9]' : 'bg-[#FFEBEE]'
+                  }`}
+                >
+                  <span
+                    className={`text-[10px] block ${
+                      solde ? 'text-[#2E7D32]' : 'text-[#C62828]'
+                    }`}
+                  >
+                    Montant restant
+                  </span>
+                  <strong
+                    className={`text-sm ${
+                      solde ? 'text-[#2E7D32]' : 'text-[#C62828]'
+                    }`}
+                  >
+                    {formatFCFA(montantRestant)}
+                  </strong>
+                </div>
+
+                <div className="bg-[#FBF6EA] rounded-sm p-2.5">
+                  <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                    <CalendarClock className="w-3 h-3" />
+                    Prochain paiement
+                  </span>
+                  <strong className="text-sm text-[#221812]">
+                    {!solde && dossier.prochainPaiementDate
+                      ? new Date(dossier.prochainPaiementDate).toLocaleDateString(
+                          'fr-FR',
+                          { day: '2-digit', month: 'short', year: 'numeric' }
+                        )
+                      : solde
+                      ? '—'
+                      : 'À définir'}
+                  </strong>
+                </div>
+              </div>
+
+              <p className="text-[9px] text-gray-400 mt-1.5 italic">
+                Scannez le QR code en bas de ce document pour vérifier cette
+                situation financière en temps réel.
+              </p>
+            </section>
+
+            {/* =================================================
                 SECTION 3 — PIÈCES
             ================================================== */}
             <section>
@@ -907,7 +1114,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   mb-3
                 "
               >
-                3. Contrôle des pièces au secrétariat
+                4. Contrôle des pièces au secrétariat
               </h2>
 
               <div
@@ -1126,13 +1333,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 "
               >
 
-                <QrCode
-                  className="
-                    w-12
-                    h-12
-                    text-[#6E1423]
-                    opacity-80
-                  "
+                <QRCodeCanvas
+                  value={verificationUrl}
+                  size={80}
+                  level="M"
+                  bgColor="#ffffff"
+                  fgColor="#450C15"
+                  marginSize={1}
                 />
 
                 <span
@@ -1147,8 +1354,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   {dossier.ref}
                 </span>
 
-                <span className="text-[9px] text-gray-400">
-                  Vérification QR Secrétariat
+                <span className="text-[9px] text-gray-400 text-center leading-tight">
+                  Scanner pour vérifier le solde
                 </span>
 
               </div>
@@ -1292,7 +1499,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
             <button
               type="button"
-              onClick={handlePrint}
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
               className="
                 inline-flex
                 items-center
@@ -1307,10 +1515,16 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 rounded-sm
                 transition-colors
                 cursor-pointer
+                disabled:opacity-60
+                disabled:cursor-wait
               "
             >
-              <Download className="w-4 h-4" />
-              <span>Imprimer / PDF</span>
+              {isGeneratingPdf ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              <span>{isGeneratingPdf ? 'Génération...' : 'Télécharger PDF'}</span>
             </button>
 
           </div>
